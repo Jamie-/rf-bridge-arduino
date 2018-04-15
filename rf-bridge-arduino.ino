@@ -34,10 +34,12 @@ void dbg(String msg) {
 }
 
 XBee xbee = XBee();
+// Attached sensor info name
+String sensorName = "Plant Moisture";
 
 // Dump the payload of a ZBRX_RESP packet to debug
 void dbgRxPacket(ZBRxResponse rx) {
-  dbg("Unknown data packet.\r\nData (ints): ");
+  dbg("Data (ints): ");
   for (int i = 0; i < rx.getDataLength(); i++) { 
     dbg(String(rx.getData(i)) + " ");
   }
@@ -71,11 +73,25 @@ void sendResponse(XBee xbee, ZBRxResponse rx, uint8_t payload[], int payloadSize
   checkTxResponse();
 }
 
+// Send a NACK with data type
+void sendNack(XBee xbee, ZBRxResponse rx, uint8_t type) {
+  uint8_t payload[2] = {CTRL_NACK, type};
+  sendResponse(xbee, rx, payload, sizeof(payload));
+}
+
+// Handle an unknown data packet
+void handleUnknownPacket(ZBRxResponse rx) {
+  dbg("Unknown data packet.\r\n");
+  dbgRxPacket(rx);
+  uint8_t payload[2] = {CTRL_NACK, rx.getData(0)};
+  sendResponse(xbee, rx, payload, sizeof(payload));
+}
+
 // Handle an IO_REQUEST
 void handleIOReq(XBee xbee, ZBRxResponse rx) {
   dbg("Processing IO_REQUEST.\r\n");
   // Need to send back an IO_RESPONSE
-  uint8_t payload[3] = {IO_RESPONSE, (ANALOGUE_1BYTE << 4) + 0, (BYTE_OUTPUT << 4) + 0};
+  uint8_t payload[3] = {IO_RESPONSE, (ANALOGUE_1BYTE << 4) + 0};
   sendResponse(xbee, rx, payload, sizeof(payload));
   dbg("Done.\r\n");
 }
@@ -83,9 +99,24 @@ void handleIOReq(XBee xbee, ZBRxResponse rx) {
 // Handle an INFO_REQUEST
 void handleInfoReq(XBee xbee, ZBRxResponse rx) {
   dbg("Processing INFO_REQUEST.\r\n");
-  // Need to send back an INFO_RESPONSE
-  uint8_t payload[5] = {INFO_RESPONSE, int('T'), int('e'), int('m'), int('p')};
-  sendResponse(xbee, rx, payload, sizeof(payload));
+  if (rx.getDataLength() == 2) {
+    // Need to send back an INFO_RESPONSE
+    uint8_t device = rx.getData(1) >> 4;
+    uint8_t index = rx.getData(1) & 15;
+    if (device == ANALOGUE_2BYTE && index == 0) {
+      uint8_t payload[32] = {INFO_RESPONSE, (device << 4) + index};
+      for (int i = 0; i < 14; i++) {
+        payload[i + 2] = sensorName[i];
+      }
+      sendResponse(xbee, rx, payload, 2 + sensorName.length());
+    } else {
+      dbg("Device " + String(device) + ", and index " + String(index) + " requested, does not exist.\r\n");
+      sendNack(xbee, rx, INFO_REQUEST);
+    }
+  } else {
+    dbg("INFO_REQUEST data length not 2, is: " + String(rx.getDataLength()) + "\r\n");
+    sendNack(xbee, rx, INFO_REQUEST);
+  }
   dbg("Done.\r\n");
 }
 
@@ -101,7 +132,8 @@ void handleData(XBee xbee) {
     // Packet is INFO_REQUEST
     handleInfoReq(xbee, rx);
   } else {
-    dbgRxPacket(rx); // Unknown data packet, print debug info
+    // Unknown data packet
+    handleUnknownPacket(rx);
   }
 }
 
@@ -123,6 +155,8 @@ void loop() {
     // Check if data is a data inbound packet
     if (xbee.getResponse().getApiId() == ZB_RX_RESPONSE) {
       handleData(xbee); // Handle data packets
+    } else if (xbee.getResponse().getApiId() == MODEM_STATUS_RESPONSE) {
+      dbg("Recieved modem status packet, ignoring.\r\n");
     } else {
       dbg("Not data packet, is: " + String(xbee.getResponse().getApiId()) + "\r\n");
     }
