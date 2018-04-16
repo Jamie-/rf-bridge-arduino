@@ -26,6 +26,10 @@
 #define BYTE_INPUT 4
 #define BYTE_OUTPUT 5
 
+// Attached sensor info name
+String sensorName = "Plant Moisture";
+uint8_t sensorType = ANALOGUE_2BYTE;
+
 // Get moisture level from sensor
 uint16_t getMoistureLevel() {
   uint16_t l = analogRead(MOISTURE_SENSE_PIN);
@@ -42,8 +46,6 @@ void dbg(String msg) {
 }
 
 XBee xbee = XBee();
-// Attached sensor info name
-String sensorName = "Plant Moisture";
 
 // Dump the payload of a ZBRX_RESP packet to debug
 void dbgRxPacket(ZBRxResponse rx) {
@@ -99,7 +101,7 @@ void handleUnknownPacket(ZBRxResponse rx) {
 void handleIOReq(ZBRxResponse rx) {
   dbg("Processing IO_REQUEST.\r\n");
   // Need to send back an IO_RESPONSE
-  uint8_t payload[2] = {IO_RESPONSE, (ANALOGUE_2BYTE << 4) + 0};
+  uint8_t payload[2] = {IO_RESPONSE, (sensorType << 4) + 0};
   sendResponse(rx, payload, sizeof(payload));
   dbg("Done.\r\n");
 }
@@ -111,9 +113,9 @@ void handleInfoReq(ZBRxResponse rx) {
     // Need to send back an INFO_RESPONSE
     uint8_t device = rx.getData(1) >> 4;
     uint8_t index = rx.getData(1) & 15;
-    if (device == ANALOGUE_2BYTE && index == 0) {
+    if (device == sensorType && index == 0) {
       uint8_t payload[32] = {INFO_RESPONSE, (device << 4) + index};
-      for (int i = 0; i < 14; i++) {
+      for (int i = 0; i < 2 + sensorName.length(); i++) {
         payload[i + 2] = sensorName[i];
       }
       sendResponse(rx, payload, 2 + sensorName.length());
@@ -135,7 +137,7 @@ void handleDataReq(ZBRxResponse rx) {
     // Need to send back a DATA_RESPONSE
     uint8_t device = rx.getData(1) >> 4;
     uint8_t index = rx.getData(1) & 15;
-    if (device == ANALOGUE_2BYTE && index == 0) {
+    if (device == sensorType && index == 0) {
       // Send back data from sensor
       uint8_t payload[4] = {DATA_RESPONSE, (device << 4) + index};
       // Read sensor
