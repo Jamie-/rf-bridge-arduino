@@ -66,7 +66,7 @@ void checkTxResponse() {
 }
 
 // Send data back to sender (master)
-void sendResponse(XBee xbee, ZBRxResponse rx, uint8_t payload[], int payloadSize) {
+void sendResponse(ZBRxResponse rx, uint8_t payload[], int payloadSize) {
   ZBTxRequest tx = ZBTxRequest(rx.getRemoteAddress16(), payload, payloadSize);
   xbee.send(tx);
   // Check response was sent
@@ -74,9 +74,9 @@ void sendResponse(XBee xbee, ZBRxResponse rx, uint8_t payload[], int payloadSize
 }
 
 // Send a NACK with data type
-void sendNack(XBee xbee, ZBRxResponse rx, uint8_t type) {
+void sendNack(ZBRxResponse rx, uint8_t type) {
   uint8_t payload[2] = {CTRL_NACK, type};
-  sendResponse(xbee, rx, payload, sizeof(payload));
+  sendResponse(rx, payload, sizeof(payload));
 }
 
 // Handle an unknown data packet
@@ -84,20 +84,20 @@ void handleUnknownPacket(ZBRxResponse rx) {
   dbg("Unknown data packet.\r\n");
   dbgRxPacket(rx);
   uint8_t payload[2] = {CTRL_NACK, rx.getData(0)};
-  sendResponse(xbee, rx, payload, sizeof(payload));
+  sendResponse(rx, payload, sizeof(payload));
 }
 
 // Handle an IO_REQUEST
-void handleIOReq(XBee xbee, ZBRxResponse rx) {
+void handleIOReq(ZBRxResponse rx) {
   dbg("Processing IO_REQUEST.\r\n");
   // Need to send back an IO_RESPONSE
   uint8_t payload[3] = {IO_RESPONSE, (ANALOGUE_1BYTE << 4) + 0};
-  sendResponse(xbee, rx, payload, sizeof(payload));
+  sendResponse(rx, payload, sizeof(payload));
   dbg("Done.\r\n");
 }
 
 // Handle an INFO_REQUEST
-void handleInfoReq(XBee xbee, ZBRxResponse rx) {
+void handleInfoReq(ZBRxResponse rx) {
   dbg("Processing INFO_REQUEST.\r\n");
   if (rx.getDataLength() == 2) {
     // Need to send back an INFO_RESPONSE
@@ -108,29 +108,29 @@ void handleInfoReq(XBee xbee, ZBRxResponse rx) {
       for (int i = 0; i < 14; i++) {
         payload[i + 2] = sensorName[i];
       }
-      sendResponse(xbee, rx, payload, 2 + sensorName.length());
+      sendResponse(rx, payload, 2 + sensorName.length());
     } else {
       dbg("Device " + String(device) + ", and index " + String(index) + " requested, does not exist.\r\n");
-      sendNack(xbee, rx, INFO_REQUEST);
+      sendNack(rx, INFO_REQUEST);
     }
   } else {
     dbg("INFO_REQUEST data length not 2, is: " + String(rx.getDataLength()) + "\r\n");
-    sendNack(xbee, rx, INFO_REQUEST);
+    sendNack(rx, INFO_REQUEST);
   }
   dbg("Done.\r\n");
 }
 
 // Handle all data interactions above ZigBee protocol
-void handleData(XBee xbee) {
+void handleData() {
   // Get data from packet
   ZBRxResponse rx = ZBRxResponse();
   xbee.getResponse().getZBTxStatusResponse(rx);
   if (rx.getData(0) == IO_REQUEST) {
     // Packet is IO_REQUEST
-    handleIOReq(xbee, rx);
+    handleIOReq(rx);
   } else if (rx.getData(0) == INFO_REQUEST) {
     // Packet is INFO_REQUEST
-    handleInfoReq(xbee, rx);
+    handleInfoReq(rx);
   } else {
     // Unknown data packet
     handleUnknownPacket(rx);
@@ -154,7 +154,7 @@ void loop() {
     
     // Check if data is a data inbound packet
     if (xbee.getResponse().getApiId() == ZB_RX_RESPONSE) {
-      handleData(xbee); // Handle data packets
+      handleData(); // Handle data packets from XBee
     } else if (xbee.getResponse().getApiId() == MODEM_STATUS_RESPONSE) {
       dbg("Recieved modem status packet, ignoring.\r\n");
     } else {
