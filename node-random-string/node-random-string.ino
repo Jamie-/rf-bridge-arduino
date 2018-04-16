@@ -27,6 +27,7 @@
 
 // Attached sensor info name
 String sensorName = "Direction Picker";
+// Attached sensor type
 uint8_t sensorType = BYTE_OUTPUT;
 
 // Get random string
