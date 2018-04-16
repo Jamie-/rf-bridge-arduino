@@ -4,6 +4,7 @@
 // Pins
 #define DBG_SERIAL_RX_PIN 6
 #define DBG_SERIAL_TX_PIN 7
+#define MOISTURE_SENSE_PIN 0 // Moisture sensor analog input pin
 
 // Packet headers
 #define DATA_REQUEST 16
@@ -24,6 +25,13 @@
 #define DIGITAL_OUTPUT 3
 #define BYTE_INPUT 4
 #define BYTE_OUTPUT 5
+
+// Get moisture level from sensor
+uint16_t getMoistureLevel() {
+  uint16_t l = analogRead(MOISTURE_SENSE_PIN);
+  dbg("Moisture Level: " + String(l) + "\r\n");
+  return l;
+}
 
 // Setup debug serial
 SoftwareSerial dbgSer(DBG_SERIAL_RX_PIN ,DBG_SERIAL_TX_PIN);
@@ -91,7 +99,7 @@ void handleUnknownPacket(ZBRxResponse rx) {
 void handleIOReq(ZBRxResponse rx) {
   dbg("Processing IO_REQUEST.\r\n");
   // Need to send back an IO_RESPONSE
-  uint8_t payload[3] = {IO_RESPONSE, (ANALOGUE_1BYTE << 4) + 0};
+  uint8_t payload[2] = {IO_RESPONSE, (ANALOGUE_2BYTE << 4) + 0};
   sendResponse(rx, payload, sizeof(payload));
   dbg("Done.\r\n");
 }
@@ -120,6 +128,32 @@ void handleInfoReq(ZBRxResponse rx) {
   dbg("Done.\r\n");
 }
 
+// Handle a DATA_REQUEST
+void handleDataReq(ZBRxResponse rx) {
+  dbg("Processing DATA_REQUEST.\r\n");
+  if (rx.getDataLength() == 2) {
+    // Need to send back a DATA_RESPONSE
+    uint8_t device = rx.getData(1) >> 4;
+    uint8_t index = rx.getData(1) & 15;
+    if (device == ANALOGUE_2BYTE && index == 0) {
+      // Send back data from sensor
+      uint8_t payload[4] = {DATA_RESPONSE, (device << 4) + index};
+      // Read sensor
+      uint16_t data = getMoistureLevel();
+      payload[2] = data >> 8; // Get highest byte (shift to lower byte)
+      payload[3] = data & 255; // Get lowest byte (mask higher byte)
+      sendResponse(rx, payload, sizeof(payload));
+    } else {
+      dbg("Device " + String(device) + ", and index " + String(index) + " requested, does not exist.\r\n");
+      sendNack(rx, DATA_REQUEST);
+    }
+  } else {
+    dbg("DATA_REQUEST data length not 2, is: " + String(rx.getDataLength()) + "\r\n");
+    sendNack(rx, DATA_REQUEST);
+  }
+  dbg("Done.\r\n");
+}
+
 // Handle all data interactions above ZigBee protocol
 void handleData() {
   // Get data from packet
@@ -131,6 +165,9 @@ void handleData() {
   } else if (rx.getData(0) == INFO_REQUEST) {
     // Packet is INFO_REQUEST
     handleInfoReq(rx);
+  } else if (rx.getData(0) == DATA_REQUEST) {
+    // Packet is DATA_REQUEST
+    handleDataReq(rx);
   } else {
     // Unknown data packet
     handleUnknownPacket(rx);
