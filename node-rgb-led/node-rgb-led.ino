@@ -21,19 +21,21 @@
 #define CTRL_ACK 255
 
 // IO Types
-#define ANALOGUE_1BYTE 0
-#define ANALOGUE_2BYTE 1
-#define DIGITAL_INPUT 2
-#define DIGITAL_OUTPUT 3
-#define BYTE_INPUT 4
-#define BYTE_OUTPUT 5
+#define INT_1B_OUTPUT 0
+#define INT_2B_OUTPUT 1
+#define INT_1B_INPUT 2
+#define INT_2B_INPUT 3
+#define DIGITAL_INPUT 4
+#define DIGITAL_OUTPUT 5
+#define BYTE_INPUT 6
+#define BYTE_OUTPUT 7
 
 // Attached device info names
 String rName = "LED Red Channel";
 String gName = "LED Green Channel";
 String bName = "LED Blue Channel";
 // Attached device types
-uint8_t sensorType = BYTE_INPUT;
+uint8_t sensorType = INT_1B_INPUT;
 
 // Get digital data
 uint8_t setColour(uint8_t r, uint8_t g, uint8_t b) {
