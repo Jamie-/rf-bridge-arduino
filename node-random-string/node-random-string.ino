@@ -18,12 +18,14 @@
 #define CTRL_ACK 255
 
 // IO Types
-#define ANALOGUE_1BYTE 0
-#define ANALOGUE_2BYTE 1
-#define DIGITAL_INPUT 2
-#define DIGITAL_OUTPUT 3
-#define BYTE_INPUT 4
-#define BYTE_OUTPUT 5
+#define INT_1B_OUTPUT 0
+#define INT_2B_OUTPUT 1
+#define INT_1B_INPUT 2
+#define INT_2B_INPUT 3
+#define DIGITAL_INPUT 4
+#define DIGITAL_OUTPUT 5
+#define BYTE_INPUT 6
+#define BYTE_OUTPUT 7
 
 // Attached sensor info name
 String sensorName = "Direction Picker";
