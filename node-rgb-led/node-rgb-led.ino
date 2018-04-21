@@ -114,7 +114,7 @@ void handleUnknownPacket(ZBRxResponse rx) {
 void handleIOReq(ZBRxResponse rx) {
   dbg("Processing IO_REQUEST.\r\n");
   // Need to send back an IO_RESPONSE
-  uint8_t payload[2] = {IO_RESPONSE, (sensorType << 4) + 2};
+  uint8_t payload[2] = {IO_RESPONSE, (sensorType << 4) + 2}; // +2 to account for 3 payloads
   sendResponse(rx, payload, sizeof(payload));
   dbg("Done.\r\n");
 }
