@@ -32,11 +32,15 @@
 // Attached sensor info name
 String sensorName = "LCD Screen";
 // Attached sensor type
-uint8_t sensorType = BYTE_INPUT;
+uint8_t inType = BYTE_INPUT;
+uint8_t outType = BYTE_OUTPUT;
+// Current output data store
+char lcdStr[32];
+uint8_t lcdStrLen = 0;
 
 // Print data to LCD
 SoftwareSerial lcdSer(LCD_RX_PIN, LCD_TX_PIN);
-void lcdPrint(String d) {
+void lcdPrint(char out[], uint8_t outLen) {
   // Clear LCD
   lcdSer.write(254);
   lcdSer.write(128);
@@ -44,10 +48,12 @@ void lcdPrint(String d) {
   lcdSer.write("                ");
   lcdSer.write(254);
   lcdSer.write(128);
-  // Get and print data
-  char out[32];
-  d.toCharArray(out, d.length() + 1);
-  lcdSer.write(out);
+  lcdSer.write(out, outLen);
+}
+
+// Clear LCD
+void clearLcd() {
+  lcdPrint("", 0);
 }
 
 // Setup debug serial
@@ -120,7 +126,7 @@ void handleUnknownPacket(ZBRxResponse rx) {
 void handleIOReq(ZBRxResponse rx) {
   dbg("Processing IO_REQUEST.\r\n");
   // Need to send back an IO_RESPONSE
-  uint8_t payload[2] = {IO_RESPONSE, (sensorType << 4) + 0};
+  uint8_t payload[3] = {IO_RESPONSE, (inType << 4), (outType << 4)};
   sendResponse(rx, payload, sizeof(payload));
   dbg("Done.\r\n");
 }
@@ -132,7 +138,7 @@ void handleInfoReq(ZBRxResponse rx) {
     // Need to send back an INFO_RESPONSE
     uint8_t device = rx.getData(1) >> 4;
     uint8_t index = rx.getData(1) & 15;
-    if (device == sensorType && index == 0) {
+    if ((device == inType || device == outType) && index == 0) {
       uint8_t payload[32] = {INFO_RESPONSE, (device << 4) + index};
       for (int i = 0; i < sensorName.length(); i++) {
         payload[i + 2] = sensorName[i];
@@ -152,18 +158,45 @@ void handleInfoReq(ZBRxResponse rx) {
 // Handle a SET_REQUEST
 void handleSetReq(ZBRxResponse rx) {
   dbg("Processing SET_REQUEST.\r\n");
-  if (rx.getDataLength() > 3) {
+  if (rx.getDataLength() > 2 && rx.getDataLength() <= 34) {
     uint8_t device = rx.getData(1) >> 4;
     uint8_t index = rx.getData(1) & 15;
-    if (device == sensorType && index == 0) {
-      String data = "";
-      for (int i = 2; i < rx.getDataLength(); i++) {
-        data += char(rx.getData(i));
+    if (device == inType && index == 0) {
+      lcdStrLen = 0; // Reset string length
+      for (int i = 2; i < rx.getDataLength(); i++) { // Offset by 2 to miss packet header
+        lcdStr[i - 2] = rx.getData(i);
+        lcdStrLen++;
       }
-      dbg("Data: " + data + "\r\n");
-      lcdPrint(data);
+      dbg("String array: " + String(lcdStr) + "\r\n");
+      dbg("String length: " + String(lcdStrLen) + "\r\n");
+      lcdPrint(lcdStr, lcdStrLen);
       // Send ACK
       sendAck(rx, SET_REQUEST);
+    } else {
+      dbg("Device " + String(device) + ", and index " + String(index) + " requested, does not exist.\r\n");
+      sendNack(rx, SET_REQUEST);
+    }
+  } else {
+    dbg("SET_REQUEST len out of 3-34, is: " + String(rx.getDataLength()) + "\r\n");
+    sendNack(rx, SET_REQUEST);
+  }
+  dbg("Done.\r\n");
+}
+
+// Handle a DATA_REQUEST
+void handleDataReq(ZBRxResponse rx) {
+  dbg("Processing DATA_REQUEST.\r\n");
+  if (rx.getDataLength() == 2) {
+    // Need to send back a DATA_RESPONSE
+    uint8_t device = rx.getData(1) >> 4;
+    uint8_t index = rx.getData(1) & 15;
+    if (device == outType && index == 0) {
+      // Send back LCD string
+      uint8_t payload[34] = {DATA_RESPONSE, (device << 4) + index};
+      for (int i = 0; i < lcdStrLen; i++) {
+        payload[2 + i] = lcdStr[i];
+      }
+      sendResponse(rx, payload, 2 + lcdStrLen); // Set length to header + data length
     } else {
       dbg("Device " + String(device) + ", and index " + String(index) + " requested, does not exist.\r\n");
       sendNack(rx, DATA_REQUEST);
@@ -189,6 +222,9 @@ void handleData() {
   } else if (rx.getData(0) == SET_REQUEST) {
     // Packet is SET_REQUEST
     handleSetReq(rx);
+  } else if (rx.getData(0) == DATA_REQUEST) {
+    // Packet is DATA_REQUEST
+    handleDataReq(rx);
   } else {
     // Unknown data packet
     handleUnknownPacket(rx);
@@ -203,7 +239,7 @@ void setup() {
   dbgSer.begin(9600);
   // Start LCD serial
   lcdSer.begin(9600);
-  lcdPrint(""); // Clear LCD
+  clearLcd();
   dbg("Booted\r\n");
 }
 
