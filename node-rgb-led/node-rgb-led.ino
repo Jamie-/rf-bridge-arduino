@@ -35,7 +35,12 @@ String rName = "LED Red Channel";
 String gName = "LED Green Channel";
 String bName = "LED Blue Channel";
 // Attached device types
-uint8_t sensorType = INT_1B_INPUT;
+uint8_t inType = INT_1B_INPUT;
+uint8_t outType = INT_1B_OUTPUT;
+// PWM values
+uint8_t rVal = 0;
+uint8_t gVal = 0;
+uint8_t bVal = 0;
 
 // Get digital data
 uint8_t setColour(uint8_t r, uint8_t g, uint8_t b) {
@@ -114,7 +119,7 @@ void handleUnknownPacket(ZBRxResponse rx) {
 void handleIOReq(ZBRxResponse rx) {
   dbg("Processing IO_REQUEST.\r\n");
   // Need to send back an IO_RESPONSE
-  uint8_t payload[2] = {IO_RESPONSE, (sensorType << 4) + 2}; // +2 to account for 3 payloads
+  uint8_t payload[3] = {IO_RESPONSE, (inType << 4) + 2, (outType << 4) + 2}; // +2 to account for 3 payloads
   sendResponse(rx, payload, sizeof(payload));
   dbg("Done.\r\n");
 }
@@ -126,7 +131,7 @@ void handleInfoReq(ZBRxResponse rx) {
     // Need to send back an INFO_RESPONSE
     uint8_t device = rx.getData(1) >> 4;
     uint8_t index = rx.getData(1) & 15;
-    if (device == sensorType) {
+    if (device == inType || device == outType) {
       uint8_t payload[32] = {INFO_RESPONSE, (device << 4) + index};
       if (index == 0) {
         for (int i = 0; i < rName.length(); i++) {
@@ -164,15 +169,18 @@ void handleSetReq(ZBRxResponse rx) {
   if (rx.getDataLength() == 3) {
     uint8_t device = rx.getData(1) >> 4;
     uint8_t index = rx.getData(1) & 15;
-    if (device == sensorType) {
+    if (device == inType) {
       if (index == 0) {
-        analogWrite(LED_R_PIN, rx.getData(2));
+        rVal = rx.getData(2);
+        analogWrite(LED_R_PIN, rVal);
         sendAck(rx, SET_REQUEST);
       } else if (index == 1) {
-        analogWrite(LED_G_PIN, rx.getData(2));
+        gVal = rx.getData(2);
+        analogWrite(LED_G_PIN, gVal);
         sendAck(rx, SET_REQUEST);
       } else if (index == 2) {
-        analogWrite(LED_B_PIN, rx.getData(2));
+        bVal = rx.getData(2);
+        analogWrite(LED_B_PIN, bVal);
         sendAck(rx, SET_REQUEST);
       } else {
         dbg("Device " + String(device) + ", and index " + String(index) + " requested, does not exist.\r\n");
@@ -185,6 +193,39 @@ void handleSetReq(ZBRxResponse rx) {
   } else {
     dbg("SET_REQUEST data length not 3, is: " + String(rx.getDataLength()) + "\r\n");
     sendNack(rx, SET_REQUEST);
+  }
+  dbg("Done.\r\n");
+}
+
+// Handle a DATA_REQUEST
+void handleDataReq(ZBRxResponse rx) {
+  dbg("Processing DATA_REQUEST.\r\n");
+  if (rx.getDataLength() == 2) {
+    // Need to send back a DATA_RESPONSE
+    uint8_t device = rx.getData(1) >> 4;
+    uint8_t index = rx.getData(1) & 15;
+    if (device == outType) {
+      uint8_t payload[3] = {DATA_RESPONSE, (device << 4) + index};
+      if (index == 0) {
+        payload[2] = rVal; // Get RED level
+        sendResponse(rx, payload, sizeof(payload));
+      } else if (index == 1) {
+        payload[2] = gVal; // Get GREEN level
+        sendResponse(rx, payload, sizeof(payload));
+      } else if (index == 2) {
+        payload[2] = bVal; // Get BLUE level
+        sendResponse(rx, payload, sizeof(payload));
+      } else {
+        dbg("Device " + String(device) + ", and index " + String(index) + " requested, does not exist.\r\n");
+        sendNack(rx, DATA_REQUEST);
+      }
+    } else {
+      dbg("Device " + String(device) + ", and index " + String(index) + " requested, does not exist.\r\n");
+      sendNack(rx, DATA_REQUEST);
+    }
+  } else {
+    dbg("DATA_REQUEST data length not 2, is: " + String(rx.getDataLength()) + "\r\n");
+    sendNack(rx, DATA_REQUEST);
   }
   dbg("Done.\r\n");
 }
@@ -203,6 +244,9 @@ void handleData() {
   } else if (rx.getData(0) == SET_REQUEST) {
     // Packet is SET_REQUEST
     handleSetReq(rx);
+  } else if (rx.getData(0) == DATA_REQUEST) {
+    // Packet is DATA_REQUEST
+      handleDataReq(rx);
   } else {
     // Unknown data packet
     handleUnknownPacket(rx);
